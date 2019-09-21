@@ -39,7 +39,47 @@ Check out the inline help:
     python factorize\factorize.py --help
 
 
-Compute the number of factories for a 75 SPM and draw their configuration to a
-PNG file:
+Print the required factories table for a 75 SPM and draw their connections graph
+to a PNG file:
 
-    python factorize\factorize.py --draw science 75
+    > python factorize\factorize.py --draw science 75
+
+     IPS RECIPE                          CRAFTING MACHINE
+      18 electric engine unit      ->    3 assembly machine 3
+      20 electric furnace          ->    2 assembly machine 3
+      20 productivity module       ->    4 assembly machine 3
+      20 flying robot frame        ->    6 assembly machine 3
+      30 piercing rounds magazine  ->    2 assembly machine 3
+      30 grenade                   ->    4 assembly machine 3
+      36 battery                   ->    3 chemical plant
+      40 firearm magazine          ->    1 assembly machine 3
+      40 processing unit           ->    6 assembly machine 3
+      60 stone wall                ->    1 assembly machine 3
+      60 inserter                  ->    1 assembly machine 3
+      60 transport belt            ->    1 assembly machine 3
+      60 low density structure     ->   16 assembly machine 3
+      75 military science pack     ->    5 assembly machine 3
+      75 logistic science pack     ->    6 assembly machine 3
+      75 production science pack   ->    7 assembly machine 3
+      75 chemical science pack     ->   12 assembly machine 3
+      75 automation science pack   ->    5 assembly machine 3
+      75 utility science pack      ->    7 assembly machine 3
+      78 engine unit               ->   11 assembly machine 3
+     132 pipe                      ->    1 assembly machine 3
+     240 iron stick                ->    1 assembly machine 3
+     270 lubricant                 ->    1 chemical plant
+     362 advanced circuit          ->   29 assembly machine 3
+     366 iron gear wheel           ->    3 assembly machine 3
+     600 rail                      ->    2 assembly machine 3
+     630 sulfur                    ->    6 chemical plant
+     700 steel plate               ->   94 electric furnace
+     840 stone brick               ->   23 electric furnace
+     860 plastic bar               ->    8 chemical plant
+    1080 sulfuric acid             ->    1 chemical plant
+    1630 electronic circuit        ->   11 assembly machine 3
+    4865 copper plate              ->  130 electric furnace
+    5970 iron plate                ->  160 electric furnace
+    6640 copper cable              ->   23 assembly machine 3
+
+And you'll have a nice plot of the factory structure saved in _megafactory.png_:
+![megafactory.png](megafactory.png)
