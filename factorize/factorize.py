@@ -10,6 +10,7 @@ from graphviz import Digraph
 from math import ceil
 from pprint import pprint
 from typing import List
+from typing import Mapping
 from typing import Optional
 
 
@@ -83,6 +84,13 @@ class Recipe:
     result_count: int
     category: RecipeCategory
     ingredients: List[Ingredient] = field(default_factory=list)
+
+
+@dataclass
+class Context:
+
+    recipes: Mapping[str, Recipe]
+    draw: bool = False
 
 
 RECIPE_SPEC = RecipeSpecType()
@@ -296,18 +304,34 @@ def draw_chain_graph(data, ingredients):
 
 @click.group()
 @click.pass_context
-def cli(_):
-    """Factorio utility toolset."""
-    pass
+@click.option('--draw', type=bool, is_flag=True,
+    help='Draw the factory graph to a PNG file')
+def cli(ctx, draw):
+    """Factorio utility toolset.
+
+    Calculates the factory configuration for producing given recipes at desired
+    rates, along with their dependencies, useful for planning and construction
+    of efficient production chains."""
+    ctx.obj.draw = draw
 
 
 @cli.command()
 @click.pass_context
 @click.argument('recipe_spec', nargs=-1, type=RECIPE_SPEC)
-@click.option('--no-draw', type=bool, is_flag=True)
-def factories(ctx, recipe_spec: [str, float], no_draw: bool):
-    """Get the number of factories for given recipes ratios."""
-    data = ctx.obj
+def factories(ctx, recipe_spec: [str, float]):
+    """Factories required for producing recipes at given rates.
+
+    RECIPE_SPEC is a space-separated list of recipe-name:items_per_minute
+    specifiers, for example:
+
+        factorize.py factories explosive-cannon-shell:10 firearm-magazine:50
+
+    will print a table of required factories necessary to produce 10 cannon
+    shells and 50 firearm magazines per minute, along with the crafting machines
+    necessary for producing the required intermediary products, such as furnaces
+    and chemical plantes.
+    """
+    data = ctx.obj.recipes
 
     chain = list(itertools.chain.from_iterable(
         get_recipe_chain(data, recipe, rate) for recipe, rate in recipe_spec))
@@ -342,34 +366,28 @@ def factories(ctx, recipe_spec: [str, float], no_draw: bool):
         machine_info = f'{machine_count:>5d} {" ".join(machine.name.split("-"))}'
         print(f'{ing_count:>7d} {" ".join(name.split("-")):<{name_col_size}}->{machine_info}')
 
-    if not no_draw:
+    if ctx.obj.draw:
         draw_chain_graph(data, ingredients)
 
 
 @cli.command()
 @click.pass_context
-@click.argument('recipe_name', type=str)
-def recipe(ctx, recipe_name):
-    print(ctx.obj[recipe_name])
-
-
-@cli.command()
-@click.pass_context
-@click.argument('packs', type=int)
-@click.option('--no-military', type=bool, is_flag=True)
-@click.option('--no-draw', type=bool, is_flag=True)
-def science(ctx, packs: int, no_military: bool, no_draw: bool):
+@click.argument('spm', type=int)
+@click.option('--no-military', type=bool, is_flag=True,
+    help='Exclude military science packs')
+def science(ctx, spm: int, no_military: bool):
+    """Factories required for producing science packs at given rate."""
     pack_names = set(SCIENCE_PACKS)
     if no_military:
         pack_names.remove('military-science-pack')
 
     ctx.invoke(
         factories,
-        recipe_spec=[(pack, packs) for pack in pack_names],
-        no_draw=no_draw)
+        recipe_spec=[(pack, spm) for pack in pack_names])
 
 
 if __name__ == '__main__':
     data = load_data()
     recipes = parse_data(data)
-    cli(obj=recipes)  # pylint: disable=unexpected-keyword-arg,no-value-for-parameter
+    context = Context(recipes)
+    cli(obj=context)  # pylint: disable=unexpected-keyword-arg,no-value-for-parameter
