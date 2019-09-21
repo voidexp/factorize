@@ -20,6 +20,7 @@ OSX/Linux users are expected to know how to setup and run the script by themesel
 1. Clone this repository:
 
     `git clone git@github.com:V0idExp/factorize.git`
+
     `cd factorize`
 
 2. Setup and activate a Python 3 virtual env:
