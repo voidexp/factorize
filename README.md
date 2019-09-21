@@ -44,7 +44,7 @@ to a PNG file:
 
     > python factorize\factorize.py --draw science 75
 
-     IPS RECIPE                          CRAFTING MACHINE
+     IPM RECIPE                          CRAFTING MACHINE
       18 electric engine unit      ->    3 assembly machine 3
       20 electric furnace          ->    2 assembly machine 3
       20 productivity module       ->    4 assembly machine 3
@@ -81,5 +81,5 @@ to a PNG file:
     5970 iron plate                ->  160 electric furnace
     6640 copper cable              ->   23 assembly machine 3
 
-And you'll have a nice plot of the factory structure saved in _megafactory.png_:
-![megafactory.png](megafactory.png)
+And you'll also have a nice plot of the factory structure saved in
+_megafactory.png_: ![megafactory.png](megafactory.png)
