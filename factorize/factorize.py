@@ -357,6 +357,9 @@ def factories(ctx, recipe_spec: [str, float]):
 
     name_col_size = max(len(ing.name) for ing in chain) + 2
 
+    header = f'{{:>7s}} {{:{name_col_size}}}      {{}}'.format('IPS', 'RECIPE', 'CRAFTING MACHINE')
+    print(header)
+
     for name in names_by_count:
         ing_count = ingredients[name]
         machine_count, machine = machines[name]
