@@ -1,17 +1,16 @@
-import click
 import enum
 import itertools
-import json
 from collections import defaultdict
 from copy import copy
-from dataclasses import dataclass
-from dataclasses import field
-from graphviz import Digraph
+from dataclasses import dataclass, field
 from math import ceil
+from os import path
 from pprint import pprint
-from typing import List
-from typing import Mapping
-from typing import Optional
+from typing import List, Mapping, Optional
+
+import click
+from graphviz import Digraph
+from lupa import LuaRuntime, lua_type  # pylint: disable=no-name-in-module
 
 
 class RecipeSpecType(click.ParamType):
@@ -89,7 +88,7 @@ class Recipe:
 @dataclass
 class Context:
 
-    recipes: Mapping[str, Recipe]
+    recipes: Mapping[str, Recipe] = None
     draw: bool = False
 
 
@@ -136,14 +135,54 @@ SCIENCE_PACKS = (
 )
 
 
-def load_data():
-    data_file = 'dump/data.json'
-    with open(data_file) as fp:
-        return fp.read()
+def load_recipes(factorio_dir: str):
+    """
+    Load recipes from Factorio data directory by interpreting the Lua scripts.
+    """
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    preamble = '''
+        aggregator = {}
+
+        data = {}
+        data["extend"] = function (data, list_of_things)
+            for key, thing in ipairs(list_of_things) do
+                table.insert(aggregator, thing)
+            end
+        end
+    '''
+    lua.execute(preamble)
+
+    recipe_files = [
+        'data/base/prototypes/recipe.lua',
+    ]
+
+    for filename in recipe_files:
+        full_path = path.join(factorio_dir, path.normpath(filename))
+        with open(full_path, 'r') as fp:
+            lua.execute(fp.read())
+
+    def lua2py(obj):
+        t = lua_type(obj)
+        if t == 'table':
+            keys = list(obj.keys())
+            is_sequence = keys == [i + 1 for i in range(len(keys))]
+            if is_sequence:
+                return [lua2py(v) for v in obj.values()]
+            else:
+                return {
+                    lua2py(k): lua2py(obj[k]) for k in keys
+                }
+        elif t is None:
+            return obj
+        else:
+            raise ValueError(f'unsupported Lua type {t}')
+
+    aggregator = lua.eval('aggregator')
+    return lua2py(aggregator)
 
 
-def parse_data(raw_data):
-    items = json.loads(raw_data)
+def parse_data(items):
     recipes = {}
     ingredients = set()
 
@@ -304,20 +343,28 @@ def draw_chain_graph(data, ingredients):
 
 @click.group()
 @click.pass_context
+@click.option('--factorio', required=True,
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
+    help='Factorio installation path')
 @click.option('--draw', type=bool, is_flag=True,
     help='Draw the factory graph to a PNG file')
-def cli(ctx, draw):
+def cli(ctx, factorio, draw):
     """Factorio utility toolset.
 
     Calculates the factory configuration for producing given recipes at desired
     rates, along with their dependencies, useful for planning and construction
     of efficient production chains."""
+
+    raw_data = load_recipes(factorio)
+    print(f'Loaded {len(raw_data)} recipes from {factorio}')
+    ctx.obj.recipes = parse_data(raw_data)
+
     ctx.obj.draw = draw
 
 
 @cli.command()
 @click.pass_context
-@click.argument('recipe_spec', nargs=-1, type=RECIPE_SPEC)
+@click.argument('recipe_spec', nargs=-1, required=True, type=RECIPE_SPEC)
 def factories(ctx, recipe_spec: [str, float]):
     """Factories required for producing recipes at given rates.
 
@@ -357,7 +404,7 @@ def factories(ctx, recipe_spec: [str, float]):
 
     name_col_size = max(len(ing.name) for ing in chain) + 2
 
-    header = f'{{:>7s}} {{:{name_col_size}}}      {{}}'.format('IPS', 'RECIPE', 'CRAFTING MACHINE')
+    header = f'{{:>7s}} {{:{name_col_size}}}      {{}}'.format('IPM', 'RECIPE', 'CRAFTING MACHINE')
     print(header)
 
     for name in names_by_count:
@@ -390,7 +437,5 @@ def science(ctx, spm: int, no_military: bool):
 
 
 if __name__ == '__main__':
-    data = load_data()
-    recipes = parse_data(data)
-    context = Context(recipes)
+    context = Context()
     cli(obj=context)  # pylint: disable=unexpected-keyword-arg,no-value-for-parameter
