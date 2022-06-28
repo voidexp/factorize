@@ -35,4 +35,4 @@ def test_science():
         # 75 automation science pack   ->    5 assembly machine 3
         pattern = rf'^\s*{spm}\s+{name}\s+->\s+{factories} assembly machine 3$'
         match = re.search(pattern, result.output, re.MULTILINE | re.IGNORECASE)
-        assert match is not None, f'expected number of factories not found for {pack}'
+        assert match is not None, f'expected {factories} factories for {pack}'

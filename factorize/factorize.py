@@ -5,8 +5,7 @@ from copy import copy
 from dataclasses import dataclass, field
 from math import ceil
 from os import path
-from os import environ
-from typing import List, Mapping, Optional
+from typing import List, Mapping, Optional, Sequence
 
 import click
 from graphviz import Digraph
@@ -90,7 +89,6 @@ class Context:
 
     recipes: Mapping[str, Recipe] = None
     draw: bool = False
-    machine_level: int = 1
 
 
 RECIPE_SPEC = RecipeSpecType()
@@ -243,62 +241,46 @@ def parse_data(items) -> Mapping[str, Recipe]:
     return recipes
 
 
-def calc_required_factories(recipe: Recipe, speed_multiplier: float, items_per_minute: float) -> float:
+def calc_required_factories(recipe: Recipe, speed: float, required_ipm: float) -> float:
     """
     Calculate the number of factories (crafting machines) required to produce
     the given amount of items per minute, as defined by the recipe.
     """
-
-    ipm = 60.0 / (recipe.time / (recipe.result_count * speed_multiplier))
-    return ceil(items_per_minute / ipm)
-
-
-def calc_cycles_per_minute(recipe: Recipe, n_factories) -> float:
-    """
-    Calculate the number of production cycles per minute for a given recipe by
-    a given number of factories.
-    """
-    return ceil((60.0 / recipe.time) * n_factories)
+    ipm = (60.0 / (recipe.time / speed)) * recipe.result_count
+    return ceil(round(required_ipm / ipm, 2))
 
 
-def find_machine(recipe: Recipe, machine_level: int) -> Optional[CraftingMachine]:
+def find_machine(recipe: Recipe) -> Optional[CraftingMachine]:
     """
     Find the best machine for given recipe which matches the required level.
     """
     if recipe.category is not RecipeCategory.RESOURCE:
-        if recipe.category in (RecipeCategory.ADVANCED_CRAFTING, RecipeCategory.CRAFTING, RecipeCategory.CRAFTING_WITH_FLUID):
-            machines = CRAFTING_MACHINES[recipe.category]
-            return machines[min(len(machines) - 1, machine_level)]
-
+        return CRAFTING_MACHINES[recipe.category][-1]
     return None
 
 
-def get_recipe_chain(data, recipe_name: str, prod_rate: float, machine_level):
-    chain = []
+def get_recipe_chain(data, recipe_name: str, prod_rate: float) -> Sequence[Ingredient]:
     deps = [Ingredient(recipe_name, prod_rate)]
 
     while deps:
-        ing = deps.pop(0)
-        recipe = data[ing.name]
+        ingredient = deps.pop(0)
+        yield ingredient
 
-        chain.append(ing)
-
-        machine = find_machine(recipe, machine_level)
-        if machine is None:
+        recipe = data[ingredient.name]
+        if recipe.category is RecipeCategory.RESOURCE:
             continue
+        cycles_per_minute = 60.0 / recipe.time
+        items_per_minute = cycles_per_minute * recipe.result_count
+        factor = ingredient.count / items_per_minute
+        cycles = cycles_per_minute * factor
 
-        factories = calc_required_factories(recipe, machine.crafting_speed, ing.count)
-        cycles = calc_cycles_per_minute(recipe, factories)
-
-        for ing in recipe.ingredients:
-            ing = copy(ing)
-            ing.count *= cycles
-            deps.append(ing)
-
-    return chain
+        for ingredient in recipe.ingredients:
+            ingredient = copy(ingredient)
+            ingredient.count *= cycles
+            deps.append(ingredient)
 
 
-def draw_chain_graph(data, ingredients, machine_level):
+def draw_chain_graph(data, ingredients):
     ingredient_ids = {}
     for ing in ingredients:
         if ing not in ingredient_ids:
@@ -312,7 +294,7 @@ def draw_chain_graph(data, ingredients, machine_level):
 
     for ing_name, ing_id in ingredient_ids.items():
         recipe = data[ing_name]
-        machine = find_machine(recipe, machine_level)
+        machine = find_machine(recipe)
         if machine is not None:
             factories = calc_required_factories(
                 recipe, machine.crafting_speed, ingredients[ing_name])
@@ -353,25 +335,18 @@ def draw_chain_graph(data, ingredients, machine_level):
 @click.option('--factorio', required=True, envvar='FACTORIO',
     type=click.Path(exists=True, file_okay=False, dir_okay=True, readable=True),
     help='Factorio installation path; overrides FACTORIO env variable')
-@click.option('--machine-level', type=click.IntRange(1, len(ASSEMBLY_MACHINES)),
-    default=len(ASSEMBLY_MACHINES),
-    help=f'Assembly Machine level to use (default={len(ASSEMBLY_MACHINES)})')
 @click.option('--draw', type=bool, is_flag=True,
     help='Draw the factory graph to a PNG file')
-def cli(ctx, factorio, draw, machine_level):
+def cli(ctx, factorio, draw):
     """Factorio utility toolset.
 
     Calculates the factory configuration for producing given recipes at desired
     rates, along with their dependencies, useful for planning and construction
     of efficient production chains."""
-    # factorio_dir = factorio or environ.get('FACTORIO')
-    # if not factorio_dir:
-    #     raise click.UsageError(f'Factorio installation path not specified;\nUse --factorio option or FACTORIO env variable.')
 
     raw_data = load_recipes(factorio)
     print(f'Loaded {len(raw_data)} recipes from {factorio}')
     ctx.obj.recipes = parse_data(raw_data)
-    ctx.obj.machine_level = machine_level - 1  # transform to 0-based index
     ctx.obj.draw = draw
 
 
@@ -391,23 +366,31 @@ def factories(ctx, recipe_spec: list[tuple[str, float]]):
     necessary for producing the required intermediary products, such as furnaces
     and chemical plantes.
     """
+
     data = ctx.obj.recipes
-    machine_level = ctx.obj.machine_level
 
+    # Build the list of all ingredients needed for production of the given item
     chain = list(itertools.chain.from_iterable(
-        get_recipe_chain(data, recipe, rate, machine_level) for recipe, rate in recipe_spec))
+        get_recipe_chain(data, recipe, count) for recipe, count in recipe_spec))
 
-    ingredients = defaultdict(int)
-
+    # Sum up the totals for each ingredient
+    ingredients = defaultdict(float)
     for ing in chain:
         ingredients[ing.name] += ing.count
 
+    # Round the totals up
+    for ing, count in ingredients.items():
+        ingredients[ing] = int(ceil(round(count, 2)))
+
+    # Calculate the type and count of machines needed for each ingredient
     machines = {}
     for ing, count in ingredients.items():
         recipe = data[ing]
 
-        machine = find_machine(recipe, machine_level)
+        machine = find_machine(recipe)
         if machine is None:
+            # TODO: items that are considered as "raw" materials don't have
+            # machines atm, consider adding the drills and pumpjacks later
             machines[ing] = (0, None)
         else:
             machines[ing] = (
@@ -431,7 +414,7 @@ def factories(ctx, recipe_spec: list[tuple[str, float]]):
         print(f'{ing_count:>7d} {" ".join(name.split("-")):<{name_col_size}}->{machine_info}')
 
     if ctx.obj.draw:
-        draw_chain_graph(data, ingredients, machine_level)
+        draw_chain_graph(data, ingredients)
 
 
 @cli.command()
