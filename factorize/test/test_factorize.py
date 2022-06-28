@@ -1,33 +1,19 @@
-import pytest
 import re
-from ..factorize import cli
-from ..factorize import Context
-from ..factorize import load_data
-from ..factorize import parse_data
+
 from click.testing import CliRunner
 
-
-@pytest.fixture(scope='session')
-def recipe_data():
-    data = load_data()
-    recipes = parse_data(data)
-    return recipes
+from ..factorize import cli
+from ..factorize import Context
 
 
-@pytest.fixture
-def context(recipe_data):
-    ctx = Context(recipes=recipe_data)
-    yield ctx
-
-
-def test_science(context):
+def test_science():
     spm = 75
     runner = CliRunner()
     result = runner.invoke(
         cli,
         args=['science', '75'],
         catch_exceptions=False,
-        obj=context)
+        obj=Context())
 
     assert result is not None
     assert result.exit_code == 0
