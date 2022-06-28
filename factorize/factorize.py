@@ -431,7 +431,7 @@ def factories(ctx, recipe_spec: list[tuple[str, float]]):
         print(f'{ing_count:>7d} {" ".join(name.split("-")):<{name_col_size}}->{machine_info}')
 
     if ctx.obj.draw:
-        draw_chain_graph(data, ingredients)
+        draw_chain_graph(data, ingredients, machine_level)
 
 
 @cli.command()
